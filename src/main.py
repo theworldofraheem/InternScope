@@ -11,7 +11,11 @@ from storage import save_seen_jobs
 from scraper import fetch_lever_jobs, fetch_indeed_jobs, gather_all_jobs
 from matcher import compute_match
 from notifier import notify_discord
-from resume_handler import get_resume_text  
+from resume_handler import get_resume_text 
+from logger import setup_logger
+
+# --- Load configuration ---
+logger = setup_logger() 
 
 with open("src/config.json") as f:
     CONFIG = json.load(f)
@@ -45,7 +49,7 @@ def extract_text_from_pdf(file_path):
 @bot.tree.command(name="upload_resume", description="Upload your resume PDF for analysis.")
 async def upload_resume(interaction: discord.Interaction):
     await interaction.response.send_message(
-        "📎 Please upload your resume PDF as a file attachment within 5 minutes."
+        "Please upload your resume PDF as a file attachment within 5 minutes."
     )
 
     def check(msg):
@@ -141,7 +145,7 @@ async def delete_resume(interaction: discord.Interaction):
 
 @tasks.loop(hours=CHECK_INTERVAL_HOURS)
 async def job_monitor():
-    print("🔍 Running scheduled job check...")
+    logger.info("Running scheduled job check...")
     seen = load_seen_jobs()
     resume_text = get_resume_text()
     jobs = gather_all_jobs()
@@ -153,7 +157,8 @@ async def job_monitor():
             score = compute_match(resume_text, job["title"] + " " + desc)
             if score >= MATCH_THRESHOLD:
                 notify_discord(job, score)
-                print(f"✅ New job found: {job['title']} ({score}%)")
+                logger.info(f"New job found: {job['title']} ({score}%)")
+            
             new_seen.add(job["link"])
 
     save_seen_jobs(new_seen)
@@ -166,7 +171,7 @@ async def job_monitor():
 async def on_ready():
     await bot.tree.sync()
     job_monitor.start()     # start the background loop
-    print(f"✅ Logged in as {bot.user}")
+    print(f"Logged in as {bot.user}")
 
 
 # --- Run the bot ---
