@@ -1,6 +1,7 @@
 import os
 import time
 import fitz 
+import json
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
@@ -12,7 +13,13 @@ from matcher import compute_match
 from notifier import notify_discord
 from resume_handler import get_resume_text  
 
+with open("src/config.json") as f:
+    CONFIG = json.load(f)
 
+COMPANIES = CONFIG["companies"]
+CHECK_INTERVAL_HOURS = CONFIG["check_interval_hours"]
+MATCH_THRESHOLD = CONFIG["match_threshold"]
+DEBUG_MODE = CONFIG["debug_mode"]
 
 # --- Load token from .env file ---
 load_dotenv()
@@ -132,7 +139,7 @@ async def delete_resume(interaction: discord.Interaction):
     msg = "Your resume has been deleted." if deleted else " No resume found to delete."
     await interaction.response.send_message(msg)
 
-@tasks.loop(minutes=1)
+@tasks.loop(hours=CHECK_INTERVAL_HOURS)
 async def job_monitor():
     print("🔍 Running scheduled job check...")
     seen = load_seen_jobs()
@@ -144,7 +151,7 @@ async def job_monitor():
         if job['link'] not in seen:
             desc = job.get("description", "")
             score = compute_match(resume_text, job["title"] + " " + desc)
-            if score >= 70:
+            if score >= MATCH_THRESHOLD:
                 notify_discord(job, score)
                 print(f"✅ New job found: {job['title']} ({score}%)")
             new_seen.add(job["link"])

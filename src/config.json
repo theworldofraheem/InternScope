@@ -1,0 +1,6 @@
+{
+  "companies": ["verafin", "colabsoftware", "shopify", "datadog", "stripe"],
+  "check_interval_hours": 1,
+  "match_threshold": 70,
+  "debug_mode": true
+}
