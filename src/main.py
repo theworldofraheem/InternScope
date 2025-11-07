@@ -11,7 +11,7 @@ from storage import save_seen_jobs
 from scraper import fetch_lever_jobs, fetch_indeed_jobs, gather_all_jobs
 from matcher import compute_match
 from notifier import notify_discord
-from resume_handler import get_resume_text 
+from resume_handler import get_resume_text, is_resume_text
 from logger import setup_logger
 
 # --- Load configuration ---
@@ -49,7 +49,7 @@ def extract_text_from_pdf(file_path):
 @bot.tree.command(name="upload_resume", description="Upload your resume PDF for analysis.")
 async def upload_resume(interaction: discord.Interaction):
     await interaction.response.send_message(
-        "Please upload your resume PDF as a file attachment within 5 minutes."
+        "📎 Please upload your resume PDF as a file attachment within 5 minutes."
     )
 
     def check(msg):
@@ -59,19 +59,34 @@ async def upload_resume(interaction: discord.Interaction):
         msg = await bot.wait_for("message", timeout=300.0, check=check)
         attachment = msg.attachments[0]
 
+        # 1. Check file type
         if not attachment.filename.lower().endswith(".pdf"):
-            await interaction.followup.send("Please upload a `.pdf` file.")
+            await interaction.followup.send("⚠️ Please upload a `.pdf` file.")
             return
 
+        # 2. Save the uploaded PDF
         os.makedirs("src/data", exist_ok=True)
         file_path = f"src/data/{attachment.filename}"
         await attachment.save(file_path)
 
+        # 3. Extract text
         global resume_text
         resume_text = extract_text_from_pdf(file_path)
-        await interaction.followup.send(f"Resume '{attachment.filename}' uploaded successfully!")
+
+        # 4. Validate the file content (using is_resume_text)
+        if not is_resume_text(resume_text):
+            os.remove(file_path)  # delete invalid file
+            await interaction.followup.send(
+                "⚠️ This file doesn’t appear to be a résumé. Please upload your actual résumé PDF."
+            )
+            return
+
+        # ✅ 5. Confirm success
+        await interaction.followup.send(f"Resume `{attachment.filename}` uploaded successfully!")
+
     except Exception as e:
         await interaction.followup.send(f"Upload failed: {e}")
+
 
 # --- Slash command: analyze resume ---
 @bot.tree.command(name="analyze_resume", description="Analyze your uploaded resume for key skills.")
@@ -94,9 +109,10 @@ async def analyze_resume(interaction: discord.Interaction):
     await interaction.response.send_message(feedback)
 # --- Slash command: update resume ---
 @bot.tree.command(name="update_resume", description="Replace your existing resume with a new one.")
+@bot.tree.command(name="update_resume", description="Replace your existing resume with a new one.")
 async def update_resume(interaction: discord.Interaction):
     await interaction.response.send_message(
-        "Please upload your updated resume PDF within 5 minutes."
+        "📎 Please upload your updated resume PDF within 5 minutes."
     )
 
     def check(msg):
@@ -106,27 +122,45 @@ async def update_resume(interaction: discord.Interaction):
         msg = await bot.wait_for("message", timeout=300.0, check=check)
         attachment = msg.attachments[0]
 
+        #1. Check file type
         if not attachment.filename.lower().endswith(".pdf"):
-            await interaction.followup.send("Please upload a `.pdf` file.")
+            await interaction.followup.send("⚠️ Please upload a `.pdf` file.")
             return
 
         os.makedirs("src/data", exist_ok=True)
         file_path = f"src/data/{attachment.filename}"
 
-        # Delete old resume if it exists
+        #2. Delete old resume if it exists
         old_files = [f for f in os.listdir("src/data") if f.lower().endswith(".pdf")]
         for f in old_files:
             os.remove(os.path.join("src/data", f))
 
+        #3. Save new file
         await attachment.save(file_path)
-        global resume_text
-        resume_text = extract_text_from_pdf(file_path)
 
+        #4. Extract text
+        text = extract_text_from_pdf(file_path)
+
+        #5. Validate résumé content
+        if not is_resume_text(text):
+            os.remove(file_path)
+            await interaction.followup.send(
+                "⚠️ This file doesn’t appear to be a résumé. Please upload your actual résumé PDF."
+            )
+            return
+
+        #6. Update global résumé text
+        global resume_text
+        resume_text = text
+
+        # 7. Confirm success
         await interaction.followup.send(
-            f"Your resume has been successfully **updated** to `{attachment.filename}`!"
+            f"Your résumé has been successfully updated to `{attachment.filename}`!"
         )
+
     except Exception as e:
         await interaction.followup.send(f"Update failed: {e}")
+
 
 # --- Slash command: delete resume ---
 @bot.tree.command(name="delete_resume", description="Delete your uploaded resume.")

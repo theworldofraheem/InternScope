@@ -14,3 +14,8 @@ def get_resume_text():
                 return "".join(page.get_text() for page in pdf)
 
     return ""
+
+def is_resume_text(text):
+    keywords = ["experience", "education", "skills", "projects", "contact", "summary"]
+    matches = sum(1 for k in keywords if k in text.lower())
+    return matches >= 2
