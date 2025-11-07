@@ -198,7 +198,18 @@ async def job_monitor():
     save_seen_jobs(new_seen)
     print("Job check complete.")
 
-
+@bot.tree.command(name="send_test_alert", description="Send a test job alert to verify Discord notifications.")
+async def send_test_alert(interaction: discord.Interaction):
+    fake_job = {
+        "title": "Test Software Developer",
+        "company": "InternScope",
+        "link": "https://example.com/job",
+        "location": "Remote",
+        "description": "This is a test alert to confirm Discord integration.",
+        "source": "Manual Test"
+    }
+    notify_discord(fake_job, 95)
+    await interaction.response.send_message("✅ Test alert sent! Check your Discord channel.")
 
 # --- Event: on_ready ---
 @bot.event
