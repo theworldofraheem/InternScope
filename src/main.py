@@ -8,8 +8,8 @@ from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from storage import load_seen_jobs
 from storage import save_seen_jobs
-from scraper import fetch_lever_jobs, fetch_indeed_jobs, gather_all_jobs
-from matcher import compute_match, hybrid_match_score
+from scraper import gather_all_jobs, fetch_indeed_query
+from matcher import hybrid_match_score
 from notifier import notify_discord
 from resume_handler import get_resume_text, is_resume_text, extract_resume_skills
 from logger import setup_logger
@@ -110,7 +110,6 @@ async def analyze_resume(interaction: discord.Interaction):
 
     await interaction.response.send_message(feedback)
 # --- Slash command: update resume ---
-@bot.tree.command(name="update_resume", description="Replace your existing resume with a new one.")
 @bot.tree.command(name="update_resume", description="Replace your existing resume with a new one.")
 async def update_resume(interaction: discord.Interaction):
     await interaction.response.send_message(
@@ -213,7 +212,7 @@ async def send_test_alert(interaction: discord.Interaction):
     }
     notify_discord(fake_job, 95)
     await interaction.response.send_message("✅ Test alert sent! Check your Discord channel.")
-    
+
 @bot.tree.command(name="find_jobs", description="Search internships by keyword.")
 async def find_jobs(interaction: discord.Interaction, query: str):
     await interaction.response.send_message(f"🔍 Searching for internships with `{query}`...")
