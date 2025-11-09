@@ -9,10 +9,11 @@ from dotenv import load_dotenv
 from storage import load_seen_jobs
 from storage import save_seen_jobs
 from scraper import fetch_lever_jobs, fetch_indeed_jobs, gather_all_jobs
-from matcher import compute_match
+from matcher import compute_match, hybrid_match_score
 from notifier import notify_discord
-from resume_handler import get_resume_text, is_resume_text
+from resume_handler import get_resume_text, is_resume_text, extract_resume_skills
 from logger import setup_logger
+
 
 # --- Load configuration ---
 logger = setup_logger() 
@@ -49,7 +50,7 @@ def extract_text_from_pdf(file_path):
 @bot.tree.command(name="upload_resume", description="Upload your resume PDF for analysis.")
 async def upload_resume(interaction: discord.Interaction):
     await interaction.response.send_message(
-        "📎 Please upload your resume PDF as a file attachment within 5 minutes."
+        "Please upload your resume PDF as a file attachment within 5 minutes."
     )
 
     def check(msg):
@@ -61,7 +62,7 @@ async def upload_resume(interaction: discord.Interaction):
 
         # 1. Check file type
         if not attachment.filename.lower().endswith(".pdf"):
-            await interaction.followup.send("⚠️ Please upload a `.pdf` file.")
+            await interaction.followup.send("Please upload a `.pdf` file.")
             return
 
         # 2. Save the uploaded PDF
@@ -72,16 +73,17 @@ async def upload_resume(interaction: discord.Interaction):
         # 3. Extract text
         global resume_text
         resume_text = extract_text_from_pdf(file_path)
+        RESUME_SKILLS = extract_resume_skills(resume_text)
 
         # 4. Validate the file content (using is_resume_text)
         if not is_resume_text(resume_text):
             os.remove(file_path)  # delete invalid file
             await interaction.followup.send(
-                "⚠️ This file doesn’t appear to be a résumé. Please upload your actual résumé PDF."
+                "This file doesn’t appear to be a résumé. Please upload your actual résumé PDF."
             )
             return
 
-        # ✅ 5. Confirm success
+        # 5. Confirm success
         await interaction.followup.send(f"Resume `{attachment.filename}` uploaded successfully!")
 
     except Exception as e:
@@ -112,7 +114,7 @@ async def analyze_resume(interaction: discord.Interaction):
 @bot.tree.command(name="update_resume", description="Replace your existing resume with a new one.")
 async def update_resume(interaction: discord.Interaction):
     await interaction.response.send_message(
-        "📎 Please upload your updated resume PDF within 5 minutes."
+        "Please upload your updated resume PDF within 5 minutes."
     )
 
     def check(msg):
@@ -145,13 +147,14 @@ async def update_resume(interaction: discord.Interaction):
         if not is_resume_text(text):
             os.remove(file_path)
             await interaction.followup.send(
-                "⚠️ This file doesn’t appear to be a résumé. Please upload your actual résumé PDF."
+                "This file doesn’t appear to be a résumé. Please upload your actual résumé PDF."
             )
             return
 
         #6. Update global résumé text
-        global resume_text
-        resume_text = text
+        global resume_text, RESUME_SKILLS
+        resume_text = extract_text_from_pdf(file_path)
+        RESUME_SKILLS = extract_resume_skills(resume_text)
 
         # 7. Confirm success
         await interaction.followup.send(
@@ -188,7 +191,7 @@ async def job_monitor():
     for job in jobs:
         if job['link'] not in seen:
             desc = job.get("description", "")
-            score = compute_match(resume_text, job["title"] + " " + desc)
+            score = hybrid_match_score(resume_text, job["title"] + " " + desc, RESUME_SKILLS)
             if score >= MATCH_THRESHOLD:
                 notify_discord(job, score)
                 logger.info(f"New job found: {job['title']} ({score}%)")
@@ -210,6 +213,28 @@ async def send_test_alert(interaction: discord.Interaction):
     }
     notify_discord(fake_job, 95)
     await interaction.response.send_message("✅ Test alert sent! Check your Discord channel.")
+    
+@bot.tree.command(name="find_jobs", description="Search internships by keyword.")
+async def find_jobs(interaction: discord.Interaction, query: str):
+    await interaction.response.send_message(f"🔍 Searching for internships with `{query}`...")
+    jobs = fetch_indeed_query(query)
+    if not jobs:
+        await interaction.followup.send("No internships found.")
+        return
+
+    resume = resume_text or get_resume_text()
+    results = []
+    for job in jobs[:10]:
+        desc = job.get("description", "")
+        score = hybrid_match_score(resume, job["title"] + " " + desc, RESUME_SKILLS)
+        results.append((score, job))
+    results.sort(reverse=True)
+    top = results[:5]
+
+    msg = "**Top Matches:**\n"
+    for s, job in top:
+        msg += f"• [{job['title']}]({job['link']}) ({s}%) – {job['source']}\n"
+    await interaction.followup.send(msg)
 
 # --- Event: on_ready ---
 @bot.event
