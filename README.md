@@ -37,6 +37,6 @@ Configurable keywords, thresholds, and frequency
 
 ```bash
 git clone https://github.com/<your-username>/InternScope.git
-cd InternScope
+cd InternScope/src
 pip install -r requirements.txt
 
